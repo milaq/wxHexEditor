@@ -16,11 +16,9 @@
 				<Compiler>
 					<Add option="-fexpensive-optimizations" />
 					<Add option="-O2" />
-					<Add option="-pg" />
-					<Add option="`wx-config --cflags` -fopenmp" />
+					<Add option="`wx-config --cflags` -mtune=native -march=native -fopenmp" />
 				</Compiler>
 				<Linker>
-					<Add option="-pg" />
 					<Add option="`wx-config --libs`" />
 					<Add library="gomp" />
 					<Add library="mhash/bin/Release/libmhash.a" />

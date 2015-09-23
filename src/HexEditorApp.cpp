@@ -84,12 +84,6 @@ bool wxHexEditorApp::OnInit() {
    return true;
    }
 
-#if _FSWATCHER_
-void wxHexEditorApp::OnEventLoopEnter(wxEventLoopBase* WXUNUSED(loop)){
-      frame->CreateFileWatcher();
-		}
-#endif // _FSWATCHER_
-
 void wxHexEditorApp::SetLanguage(void){
 	wxString lang = wxConfigBase::Get()->Read( _T("Language"), wxEmptyString );
 

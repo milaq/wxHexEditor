@@ -107,9 +107,8 @@ FAL::FAL(wxFileName& myfilename, FileAccessMode FAM, unsigned ForceBlockRW ){
 	OSDependedOpen( myfilename, FAM, ForceBlockRW  );
 
 #if _FSWATCHER_ //Only GTK port is working good on detect changes of file.
-///Moved to CreateFileWatcher();
-//	if(not myfilename.GetFullPath().Lower().StartsWith( wxT("-pid=")))
-//	   file_watcher->Add( myfilename.GetFullPath(), wxFSW_EVENT_MODIFY );
+	if(not myfilename.GetFullPath().Lower().StartsWith( wxT("-pid=")))
+	   wxFileSystemWatcher::Add( myfilename.GetFullPath(), wxFSW_EVENT_MODIFY );
 #endif
 	}
 
@@ -928,3 +927,4 @@ const DiffNode* FAL::GetFirstUndoNode( void ){
 			return DiffArray.Item(i);
 	return NULL;
 	}
+

@@ -64,11 +64,6 @@ class wxHexEditorApp : public wxApp {
    private:
       class HexEditorFrame* frame;
       wxLocale myLocale;
-
-#if _FSWATCHER_
-    // create the file system watcher here, because it needs an active loop
-   virtual void OnEventLoopEnter(wxEventLoopBase* WXUNUSED(loop));
-#endif // _FSWATCHER_
    };
 
 DECLARE_APP(wxHexEditorApp)

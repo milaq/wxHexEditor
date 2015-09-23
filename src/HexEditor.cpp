@@ -281,6 +281,9 @@ bool HexEditor::FileOpen(wxFileName& myfilename ) {
 		sector_size = FDtoBlockSize( GetFD() );//myfile->GetBlockSize();
 		LoadFromOffset(0, true);
 		SetLocalHexInsertionPoint(0);
+#if _FSWATCHER_
+		myfile->Connect( wxEVT_FSWATCHER, wxFileSystemWatcherEventHandler(HexEditor::OnFileModify), NULL, this );
+#endif
 		return true;
 		}
 	else {
@@ -405,7 +408,7 @@ bool HexEditor::FileSave( wxString savefilename ) {
 
 bool HexEditor::FileClose( bool WithoutChange ) {
 #if _FSWATCHER_
-//myfile->Disconnect( wxEVT_FSWATCHER, wxFileSystemWatcherEventHandler(HexEditor::OnFileModify), NULL, this );
+myfile->Disconnect( wxEVT_FSWATCHER, wxFileSystemWatcherEventHandler(HexEditor::OnFileModify), NULL, this );
 #endif
 	if( myfile != NULL ) {
 		if( myfile->IsChanged() and not WithoutChange) {
@@ -635,9 +638,8 @@ void HexEditor::ThreadPaint(wxCommandEvent& event){
 
 #if _FSWATCHER_
 void HexEditor::OnFileModify(wxFileSystemWatcherEvent &event){
-	if(event.GetChangeType()==wxFSW_EVENT_MODIFY and event.GetPath() == myfile->GetFileName().GetFullPath())
+	if(event.GetChangeType()==wxFSW_EVENT_MODIFY)
 		Reload();
-	event.Skip(true);
 	}
 #endif
 
@@ -1522,3 +1524,4 @@ bool HexEditor::PasteFromClipboard( void ) {
 	GetEventHandler()->ProcessEvent( eventx );
 	return ret;
 	}
+
