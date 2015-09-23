@@ -32,7 +32,7 @@ LANGUAGEDIRS=`ls -l ./locale | grep ^d | sed s/.*\ //g;`
 LANGUAGES=$(wildcard locale/*/wxHexEditor.po)
 RESOURCES= resources/resource.rc
 RESOURCE_OBJ=$(RESOURCES:.rc=.o)
-EXECUTABLE=wxHexEditor
+EXECUTABLE=wxhexeditor
 EXECUTABLE_WIN=$(EXECUTABLE).exe
 EXECUTABLE_DIR_MAC=$(EXECUTABLE).app
 
