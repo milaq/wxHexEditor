@@ -1,8 +1,5 @@
-WXCONFIG = wx-config
-#CC ?= `$(WXCONFIG) --cc`    #this doesn't look working here properly :(
-#CXX ?= `$(WXCONFIG) --cxx`
-CC = $(shell echo `$(WXCONFIG) --cc`)
-CXX = $(shell echo `$(WXCONFIG) --cxx`)
+WXCONFIG ?= wx-config
+HOST=
 LDFLAGS += -lgomp
 #add this ldflags for WinConsole  "-Wl,--subsystem,console -mconsole" for win-debug
 WXCXXFLAGS= `$(WXCONFIG) --cxxflags` -Iudis86 -Imhash/include -MMD -fopenmp -Wall
@@ -11,8 +8,6 @@ RC = `$(WXCONFIG) --rescomp`
 #RC = x86_64-w64-mingw32-windres --define WX_CPU_AMD64
 RCFLAGS = `$(WXCONFIG) --cxxflags | sed s/' '-m.*//g;`
 MSGFMT = msgfmt
-
-HOST=
 SOURCES= src/HexEditorGui.cpp \
 			src/FAL.cpp\
 			src/HexDialogs.cpp\
@@ -36,7 +31,7 @@ EXECUTABLE=wxhexeditor
 EXECUTABLE_WIN=$(EXECUTABLE).exe
 EXECUTABLE_DIR_MAC=$(EXECUTABLE).app
 
-PREFIX      = /usr/local
+PREFIX      = /usr
 BINDIR      = $(PREFIX)/bin
 DATADIR     = $(PREFIX)/share
 LOCALEDIR   = $(DATADIR)/locale
@@ -45,7 +40,7 @@ VERSION = 0.23 Beta
 
 .DEFAULT_GOAL := all
 
-clang: CXX=clang++
+clang: CXX=clang++ -D_Bool=bool -std=c++11 -lomp
 clang: all
 
 all:$(EXECUTABLE) langs
@@ -63,6 +58,9 @@ $(EXECUTABLE): $(OBJECTS)
 %.o : %.rc
 	$(RC) $(RCFLAGS) $< -o $@
 
+langsup:
+	tx pull
+
 langs: $(MOBJECTS)
 
 %.mo : %.po
@@ -78,13 +76,24 @@ mhash/lib/.libs/libmhash.a:
 	cd mhash; $(MAKE) $(MFLAGS)
 
 src/windrv.o:
-	$(CXX) $(LIBS) ${CXXFLAGS} ${OPTFLAGS} $(WXLDFLAGS) ${LDFLAGS} -c src/windrv.cpp -o src/windrv.o
+	$(CXX) $(LIBS) ${CXXFLAGS} ${OPTFLAGS} $(WXCXXFLAGS) $(WXLDFLAGS) ${LDFLAGS} -c src/windrv.cpp -o src/windrv.o
 
-win: $(RESOURCES) $(EXECUTABLE_WIN) src/windrv.o
+win_debug: LDFLAGS += -Wl,--subsystem,console -mconsole
+win_debug: win
+
+host_test:
+ifeq ($(HOST),)
+		echo "Cross-Compiling host detected."
+else
+CC = $(shell echo `$(WXCONFIG) --cc`)
+CXX = $(shell echo `$(WXCONFIG) --cxx`)
+endif
+
+win: host_test $(RESOURCES) $(EXECUTABLE_WIN)
 
 #Stack override required for file comparison function...
-$(EXECUTABLE_WIN): $(OBJECTS) $(RESOURCE_OBJ)
-	$(CXX) $(OBJECTS) src/windrv.o $(RESOURCE_OBJ) $(LIBS) ${CXXFLAGS} ${OPTFLAGS} $(WXLDFLAGS) -static ${LDFLAGS} -lpthread -lntdll -static-libgcc -static-libstdc++ -Wl,--stack,32000000 -o $@
+$(EXECUTABLE_WIN): $(OBJECTS) $(RESOURCE_OBJ) src/windrv.o
+	$(CXX) $(OBJECTS) src/windrv.o $(RESOURCE_OBJ) $(LIBS) ${CXXFLAGS} ${OPTFLAGS} $(WXLDFLAGS) -static ${LDFLAGS} -lpthread -static-libgcc -static-libstdc++ -Wl,--stack,32000000 -o $@
 
 maclink: $(OBJECTS)
 	$(CXX) $(OBJECTS) ${LDFLAGS} $(LIBS) ${CXXFLAGS} ${OPTFLAGS} $(WXLDFLAGS) -lexpat -Wl,-stack_size,0x2000000 -o $(EXECUTABLE)
@@ -176,6 +185,7 @@ clean:
 	rm -f $(RESOURCE_OBJ)
 	rm -f $(DEPENDS)
 	rm -f $(EXECUTABLE)
+	rm -f src/windrv.o
 	rm -f $(EXECUTABLE_WIN)
 	rm -rf $(EXECUTABLE_DIR_MAC)
 	rm -f locale/*/wxHexEditor.mo

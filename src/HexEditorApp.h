@@ -26,7 +26,7 @@
  * Purpose:   Defines Application Class
  * Author:    Death Knight (spamjunkeater@gmail.com)
  * Created:   2008-05-12
- * Copyright: Death Knight (wxhexeditor.sourceforge.net)
+ * Copyright: Erdem U. Altinyurt
  * License:   GPL v2
  **************************************************************/
 
@@ -54,21 +54,20 @@
 #include "HexEditorFrame.h"
 
 class wxHexEditorApp : public wxApp {
-   public:
-      virtual bool OnInit();
-      void SetLanguage(void);
+	public:
+		virtual bool OnInit();
+		void MyAppInit(void);
+		void SetLanguage(void);
 #ifdef _DEBUG_EVENTS_
-      int FilterEvent(wxEvent &evt);
-      void OnMouseMove(wxMouseEvent &event);
+		int FilterEvent(wxEvent &evt);
+		void OnMouseMove(wxMouseEvent &event);
 #endif
-   private:
-      class HexEditorFrame* frame;
-      wxLocale myLocale;
+	private:
+		class HexEditorFrame* frame;
+		wxLocale myLocale;
 
-#if _FSWATCHER_
-    // create the file system watcher here, because it needs an active loop
-   virtual void OnEventLoopEnter(wxEventLoopBase* WXUNUSED(loop));
-#endif // _FSWATCHER_
+		// create the file system watcher here, because it needs an active loop
+		virtual void OnEventLoopEnter(wxEventLoopBase* WXUNUSED(loop)); // wxOVERRIDE;
    };
 
 DECLARE_APP(wxHexEditorApp)

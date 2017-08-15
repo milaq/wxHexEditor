@@ -39,10 +39,10 @@
 	#define PTRACE_POKETEXT PT_WRITE_I
 #endif
 
-#ifdef BSD
-	#define DKIOCGETBLOCKSIZE DIOCGSECTORSIZE	/* Get the sector size of the device in bytes */
-	#define DKIOCGETBLOCKCOUNT DIOCGMEDIASIZE	/* Get media size in bytes */
-#endif
+//#if defined BSD
+//	#define DKIOCGETBLOCKSIZE DIOCGSECTORSIZE	/* Get the sector size of the device in bytes */
+//	#define DKIOCGETBLOCKCOUNT DIOCGMEDIASIZE	/* Get media size in bytes */
+//#endif
 
 
 WX_DEFINE_OBJARRAY(ArrayOfNode);
@@ -108,7 +108,6 @@ FAL::FAL(wxFileName& myfilename, FileAccessMode FAM, unsigned ForceBlockRW ){
 	}
 
 #ifdef __WXMSW__
-#include "windrv.h"
 HANDLE GetDDK(PCWSTR a);
 
 bool IsWinDevice( wxFileName myfilename ){
@@ -122,79 +121,63 @@ bool FAL::OSDependedOpen(wxFileName& myfilename, FileAccessMode FAM, unsigned Fo
 	//Windows special device opening
 	std::cout << "WinOSDepOpen"<< std::endl;
 	if(IsWinDevice(myfilename)){
-		wxString devnm;
 		//wxFileName converts "\\.\E:" to ".:\E:"  so we need to fix this
 		if(myfilename.GetFullPath().StartsWith( wxT(".:")))
 			devnm = wxString(wxT("\\\\.")) + myfilename.GetFullPath().AfterFirst(':');
-
 		else
 			devnm = myfilename.GetFullPath();
 		//devnm=wxT("\\Device\\HarddiskVolume1");
+
+		DWORD dwResult;
 
 		std::wcout << devnm << std::endl;
 		if( myfilename.GetFullPath().StartsWith("\\Device") ){
 			//hDevice=GetDDK(devnm);
 			//std::cout << hDevice << std::endl;
-			int nDosLinkCreated;
-			HANDLE dev;
-			DWORD dwResult;
-			BOOL bResult;
-			PARTITION_INFORMATION diskInfo;
-			DISK_GEOMETRY driveInfo;
-			WCHAR szDosDevice[MAX_PATH], szCFDevice[MAX_PATH];
-			static LONGLONG deviceSize = 0;
-			wchar_t size[100] = {0}, partTypeStr[1024] = {0}, *partType = partTypeStr;
+			int nDosLinkCreated = wdd.FakeDosNameForDevice (devnm.wchar_str(), szDosDevice, szCFDevice, FALSE);
+			devnm=szCFDevice;
+			}
 
-			BOOL drivePresent = FALSE;
-			BOOL removable = FALSE;
-
-			drivePresent = TRUE;
-
-			windowsHDD wdd;
-
-
-			nDosLinkCreated = wdd.FakeDosNameForDevice (devnm.wchar_str(), szDosDevice, szCFDevice, FALSE);
-
-			hDevice = CreateFile( szCFDevice, GENERIC_READ | GENERIC_WRITE,
+		if( FAM == ReadOnly)
+			hDevice = CreateFile (devnm, GENERIC_READ,
+												FILE_SHARE_READ | FILE_SHARE_WRITE,
+												NULL,
+												OPEN_EXISTING,
+												FILE_FLAG_NO_BUFFERING | FILE_ATTRIBUTE_READONLY  | FILE_FLAG_RANDOM_ACCESS,
+												NULL);
+		else
+			hDevice = CreateFile( devnm, GENERIC_READ | GENERIC_WRITE,
 												FILE_SHARE_READ | FILE_SHARE_WRITE,
 												NULL,
 												OPEN_EXISTING,
 												FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH | FILE_FLAG_RANDOM_ACCESS,
 												NULL);
 
-			//Where issue RemoveFakeDosName ???
-			}
-		else{
-
-			if(0 /*FAM == ReadOnly*/)
-				hDevice = CreateFile (devnm, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_READONLY|FILE_FLAG_RANDOM_ACCESS, NULL);
-			else
-				hDevice = CreateFile( devnm, GENERIC_READ | GENERIC_WRITE,
-													FILE_SHARE_READ | FILE_SHARE_WRITE,
-													NULL,
-													OPEN_EXISTING,
-													FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH | FILE_FLAG_RANDOM_ACCESS,
-													NULL);
-			}
 
 		if(hDevice==INVALID_HANDLE_VALUE) // this may happen if another program is already reading from disk
 			{
-			std::cout << "Device open invalid handle : " << hDevice << std::endl;
+			std::cout << "Device cannot open due invalid handle : " << hDevice << std::endl;
 			CloseHandle(hDevice);
 			return false;
 			}
-
 		// lock volume
-		DWORD dwResult;
-		if (!DeviceIoControl (hDevice, FSCTL_LOCK_VOLUME, NULL, 0, NULL, 0, &dwResult, NULL)){
-			DWORD err = GetLastError ();
-			wxMessageBox( wxString::Format( wxT("Error %d attempting to lock volume: %s"), err, devnm) );
-			}
+//		if (!DeviceIoControl (hDevice, FSCTL_LOCK_VOLUME, NULL, 0, NULL, 0, &dwResult, NULL)){
+//			DWORD err = GetLastError ();
+//			wxMessageBox( wxString::Format( wxT("Error %d attempting to lock volume: %s"), err, devnm) );
+//			}
+
 		//Dismount
 		//if (!DeviceIoControl (hDevice, FSCTL_DISMOUNT_VOLUME, NULL, 0, NULL, 0, &dwResult, NULL)){
 		//	DWORD err = GetLastError ();
 		//	wxMessageBox( wxString::Format( wxT("Error %d attempting to dismount volume: %s"), err, devnm) );
 		//	}
+
+		//Check if drive is mounted
+		if(!DeviceIoControl (hDevice, FSCTL_IS_VOLUME_MOUNTED, NULL, 0, NULL, 0, &dwResult, NULL)){
+			DWORD err = GetLastError ();
+			wxMessageBox( _("Device is not mounted"), _("Error"), wxOK|wxICON_ERROR );
+			return false;
+			}
 
 		DISK_GEOMETRY driveInfo;
 
@@ -357,6 +340,7 @@ bool FAL::FALOpen(wxFileName& myfilename, FileAccessMode FAM, unsigned ForceBloc
 			wxMessageBox( _("File cannot open."),_("Error"), wxOK|wxICON_ERROR );
 			return false;
 			}
+
 		if(IsBlockDev( wxFile::fd() )){
 			BlockRWSize=FDtoBlockSize( wxFile::fd() );
 			BlockRWCount=FDtoBlockCount( wxFile::fd() );
@@ -377,16 +361,15 @@ bool FAL::Close(){
 			#endif
 			#ifdef __WXMSW__
 			if(IsWinDevice( the_file ) ){
-				_close( reinterpret_cast<int>(hDevice) );
-				//wxFileName converts "\\.\E:" to ".:\E:"  so we need to fix this
-				wxString devnm;
-				if(the_file.GetFullPath().StartsWith( wxT(".:")))
-					devnm = wxString(wxT("\\\\.")) + the_file.GetFullPath().AfterFirst(':');
-				else devnm = the_file.GetFullPath();
-
 				DWORD dwResult;
+
 				// unlock volume
-				DeviceIoControl (hDevice, FSCTL_UNLOCK_VOLUME, NULL, 0, NULL, 0, &dwResult, NULL);
+				//DeviceIoControl (hDevice, FSCTL_UNLOCK_VOLUME, NULL, 0, NULL, 0, &dwResult, NULL);
+
+				wdd.RemoveFakeDosName(devnm.wchar_str(), szDosDevice);
+				wxFile::Detach();
+				_close( reinterpret_cast<int>(hDevice) );
+				//CloseHandle( hDevice ); //Not neccessary, already closed by _close
 
 				//mount
 				//if (!DeviceIoControl (hDevice, FSCTL_MOUNT_VOLUME, NULL, 0, NULL, 0, &dwResult, NULL)){
@@ -693,7 +676,7 @@ int FAL::GetBlockSize( void ){
 	return BlockRWSize;
 	}
 
-wxFileOffset FAL::Length( void ){
+wxFileOffset FAL::Length( int PatchIndice ){
 	if( ProcessID >=0 )
 		return 0x800000000000LL;
 
@@ -719,7 +702,23 @@ wxFileOffset FAL::Length( void ){
 	if(! IsOpened() )
 		return -1;
 	wxFileOffset max_size=wxFile::Length();
-	for( unsigned i=0 ; i < DiffArray.GetCount() ; i++ )
+
+	#ifdef __WXGTK__
+	///WorkAround for wxFile::Length() zero size bug
+	if( max_size == 0 ){ //This could be GIANT file like /proc/kcore = 128 TB -10MB +12KB
+		struct stat st;
+		stat(the_file.GetFullPath().To8BitData(), &st);
+		uint64_t sz = st.st_size;
+		#ifdef _DEBUG_FILE_
+		printf( "File Size by STD C is : %llu \r\n" ,sz );
+		#endif // _DEBUG_FILE_
+		max_size=sz;
+		}
+	#endif // __wxGTK__
+
+	if(PatchIndice == -1)
+		PatchIndice = DiffArray.GetCount();
+	for( unsigned i=0 ; i < PatchIndice; i++ )
 		if( DiffArray[i]->flag_undo && !DiffArray[i]->flag_commit )
 			continue;
 		else if( DiffArray[i]->flag_inject )
@@ -781,11 +780,14 @@ bool FAL::IsInjected( void ){
 	return false;
 	}
 
+#ifdef _DEBUG_FILE_
+#include <iomanip> //for setw
+#endif // _DEBUG_FILE_
 ///State of the Art Read Function
 //Only recursion could handle such a complex operation. Comes my mind while I am trying to sleep.
 long FAL::ReadR( unsigned char* buffer, unsigned size, uint64_t from, ArrayOfNode* PatchArray, int PatchIndice ){
 #ifdef _DEBUG_FILE_
-	std::cout << "ReadR from:" << std::dec << from << "\t size:" << size << "\t PtchIndice" << PatchIndice << std::endl;
+	std::cout << "ReadR from:" << std::dec << from << "\t size:"  <<  std::setw(3) << size  << "\t PtchIndice" << PatchIndice << std::endl;
 #endif // _DEBUG_FILE_
 	///Getting Data from bellow layer.
 	if( PatchIndice == 0 )	//Deepest layer
@@ -861,23 +863,26 @@ long FAL::ReadR( unsigned char* buffer, unsigned size, uint64_t from, ArrayOfNod
 		else{
 			readsize = ReadR( buffer, size, from, PatchArray, PatchIndice-1 );//PatchIndice-1 => Makes Patch = 0 for 1 patch. Read from file.
 			if(size != static_cast<unsigned int>(readsize)) //If there is free chars
-				readsize = (Length() - from > size) ? (size):(Length() - from);	//check for buffer overflow
+				readsize = (Length(PatchIndice-1) - from > size) ? (size):(Length(PatchIndice-1) - from);	//check for buffer overflow
 			ModificationPatcher( from, buffer, size, patch );
 			}
 		}
 //	if(readsize < 0)
 //		return -1;
-	if( static_cast<int64_t>(from + readsize) > Length() ){
+	if( static_cast<int64_t>(from + readsize) > Length(PatchIndice) ){
 		//Injection fills all buffer as requested. So we need truncate it for avoid random memory on file end.
-		readsize = Length()-from;
+		readsize = Length(PatchIndice)-from;
 		}
 #ifdef _DEBUG_FILE_
-	std::cout << "Read Size:" << readsize << std::endl;
+	std::cout << "Read Size:"  <<  std::setw(3) << readsize << std::endl;
 #endif // _DEBUG_FILE_
  	return readsize;
 	}
 
 long FAL::InjectionPatcher(uint64_t current_location, unsigned char* data, int size, ArrayOfNode* PatchArray, int PatchIndice){
+#ifdef _DEBUG_FILE_
+	std::cout << "InjectionP:" << std::dec << current_location << "\t size:"  <<  std::setw(3) << size  << "\t PtchIndice" << PatchIndice << std::endl;
+#endif // _DEBUG_FILE_
 	/******* MANUAL of Code Understanding *******
 	* current_location                    = [   *
 	* current_location + size             = ]   *
@@ -943,6 +948,9 @@ long FAL::InjectionPatcher(uint64_t current_location, unsigned char* data, int s
 	}
 
 long FAL::DeletionPatcher(uint64_t current_location, unsigned char* data, int size, ArrayOfNode* PatchArray, int PatchIndice){
+#ifdef _DEBUG_FILE_
+	std::cout << "Deletion P:" << std::dec << current_location << "\t size:"  <<  std::setw(3) << size  << "\t PtchIndice" << PatchIndice << std::endl;
+#endif // _DEBUG_FILE_
 	/******* MANUAL of Code Understanding ******
 	* current_location                   = [   *
 	* current_location + size            = ]   *
@@ -958,6 +966,9 @@ long FAL::DeletionPatcher(uint64_t current_location, unsigned char* data, int si
 		///State ...(..[..).].,,,.... -> ...()..[,,,]....
 		///State ...(..[...].)..,,,.. -> ...()..[,,,]..
 		if( Delete_Node->start_offset <= current_location ){
+		#ifdef _DEBUG_FILE_
+			std::cout << "D->";
+		#endif // _DEBUG_FILE_
 			return ReadR( data, size, current_location - Delete_Node->size, PatchArray, PatchIndice-1 );
 			}
 		///State ...[xxx(...)...],,,... -> ...[xxx()...,,,]...
@@ -965,12 +976,21 @@ long FAL::DeletionPatcher(uint64_t current_location, unsigned char* data, int si
 		else if( Delete_Node->start_offset > current_location && Delete_Node->start_offset < current_location + size ){
 			int first_part_size = Delete_Node->start_offset - current_location;
 			int read_size=0;
-			read_size += ReadR( data,						first_part_size,				current_location,															PatchArray,  PatchIndice-1 );
-			read_size += ReadR( data+first_part_size, size - first_part_size,		current_location + first_part_size - Delete_Node->size,		PatchArray,  PatchIndice-1 );
+		#ifdef _DEBUG_FILE_
+			std::cout << "D->";
+		#endif // _DEBUG_FILE_
+			read_size += ReadR( data,						 first_part_size,	current_location,										PatchArray,  PatchIndice-1 );
+		#ifdef _DEBUG_FILE_
+			std::cout << "D->";
+		#endif // _DEBUG_FILE_
+			read_size += ReadR( data+first_part_size, size - first_part_size,	current_location + first_part_size - Delete_Node->size,	PatchArray,  PatchIndice-1 );
 			return read_size;
 			}
 		///State ...[...]...(...)... -> ...[...]...()...
 		else{
+		#ifdef _DEBUG_FILE_
+			std::cout << "D->";
+		#endif // _DEBUG_FILE_
 			return ReadR( data, size, current_location, PatchArray, PatchIndice-1 );
 			}
 		}

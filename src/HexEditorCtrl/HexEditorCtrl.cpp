@@ -56,7 +56,7 @@ HexEditorCtrl::HexEditorCtrl(wxWindow* parent, int id, const wxPoint& pos, const
 	ZebraStriping = hex_ctrl->ZebraStriping;
 	text_ctrl->ZebraStriping = ZebraStriping;
 	offset_ctrl->ZebraStriping = ZebraStriping;
-	wxConfigBase::Get()->Read( _T("ZebraStriping"), &ZebraEnable, true);
+	myConfigBase::Get()->Read( _T("ZebraStriping"), &ZebraEnable, true);
 	sector_size=0;
    }
 
@@ -248,7 +248,7 @@ void HexEditorCtrl::SetFont( wxFont f ){
 void HexEditorCtrl::SetFont( ){
 	wxFont newfont;
 	int FontSize=10;
-	wxConfigBase::Get()->Read( wxT("FontSize"), &FontSize, 10 );
+	myConfigBase::Get()->Read( wxT("FontSize"), &FontSize, 10 );
 
 #if defined( __WXOSX__ )
 	newfont = wxFont(FontSize, wxFONTFAMILY_MODERN, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL, 0, wxT("Monaco"), wxFONTENCODING_ISO8859_1);// Fonts are too small on wxOSX 2.9.x series.
@@ -280,7 +280,7 @@ void HexEditorCtrl::SetStyle( ) {
    offset_ctrl->SetDefaultStyle( Style );
    hex_ctrl->SetDefaultStyle( Style );
 	wxString cp;
-	wxConfigBase::Get()->Read( _T("CharacterEncoding"), &cp, wxT("DOS OEM") );
+	myConfigBase::Get()->Read( _T("CharacterEncoding"), &cp, wxT("DOS OEM") );
 	text_ctrl->PrepareCodepageTable(cp);
    text_ctrl->SetDefaultStyle( Style );
 
@@ -936,15 +936,45 @@ bool HexEditorCtrl::LoadTAGS( wxFileName flnm ){
 void HexEditorCtrl::MoveTAGS( uint64_t location, int64_t size ){
 	for( unsigned i = 0 ; i < MainTagArray.Count() ; i++ ){
 		TagElement *TAG = MainTagArray.Item(i);
-		if( size < 0 && TAG->start >= location && TAG->start <= location+(-size) ){//Deletion, (-size) double negation indicates deletion range.
-			MainTagArray.RemoveAt(i); //Deletion of code if start inside deletion selection.
+
+		//Deletion, (-size) double negation indicates deletion range.
+		if( size < 0 && TAG->start >= location && TAG->start <= location+(-size) ){
+			//Deletion of code if start inside deletion selection.
+			//i-- due MainTagArray.Count() shrinks
+			MainTagArray.RemoveAt(i--);
 			continue;
 			}
+
+		//Insert operation
 		if( TAG->start >= location ){
 			TAG->start += size;
 			TAG->end += size;
 			}
 		}
+
+	for( unsigned i = 0 ; i < HighlightArray.Count() ; i++ ){
+		TagElement *TAG = HighlightArray.Item(i);
+
+		//Deletion, (-size) double negation indicates deletion range.
+		if( size < 0 && TAG->start >= location && TAG->start <= location+(-size) ){
+			//Deletion of code if start inside deletion selection.
+			//i-- due HighlightArray.Count() shrinks
+			HighlightArray.RemoveAt(i--);
+			continue;
+			}
+
+		//Insert operation
+		if( TAG->start >= location ){
+			TAG->start += size;
+			TAG->end += size;
+			}
+		}
+
+	wxUpdateUIEvent eventx( TAG_CHANGE_EVENT );
+	GetEventHandler()->ProcessEvent( eventx );
+
+	eventx.SetId( SEARCH_CHANGE_EVENT );
+	GetEventHandler()->ProcessEvent( eventx );
 	}
 
 bool HexEditorCtrl::SaveTAGS( wxFileName flnm ){
@@ -997,9 +1027,11 @@ bool HexEditorCtrl::SaveTAGS( wxFileName flnm ){
 			}
 		doc.SetFileEncoding( wxT("UTF-8") );
 		doc.SetRoot( node_Root );
-		if( !flnm.GetFullName().Lower().EndsWith(wxT(".tags")) )
-			return doc.Save(flnm.GetFullPath() + wxT(".tags"));
-		return doc.Save(flnm.GetFullPath());
+		wxString path = flnm.GetFullPath();
+		if( !path.Lower().EndsWith(wxT(".tags")) )
+			path += wxT(".tags");
+
+		return doc.Save(path);
 		}
 	}
 

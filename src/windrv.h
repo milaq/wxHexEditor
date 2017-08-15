@@ -24,8 +24,8 @@
 
 /******************This file By Charilaos Skandylas ********************/
 
-#ifndef __HDwin__
-#define __HDwin__
+#ifndef __WinDrv__
+#define __WinDrv__
 #include <windows.h>
 #include <winioctl.h>
 #include <stdio.h>
@@ -33,14 +33,15 @@
 #include <vector>
 
 using namespace std;
+/*
 struct _opt {
-	bool				list;
-	bool				yes;
+	bool			list;
+	bool			yes;
 	unsigned int	quiet;
 	ULONGLONG		start;
 	ULONGLONG		end;
-	bool				read;
-	bool				kilobyte;
+	bool			read;
+	bool			kilobyte;
 	unsigned int	refresh;
 	};
 
@@ -54,15 +55,15 @@ static t_opt opt = {
 	false,			// kilobyte
 	1,				// refresh
 	};
-
+*/
 class windowsHDD
 	{	private:
-		vector<WCHAR*> devicenames;
+		vector<string> devicenames;
 		void list_device(WCHAR *format_str, WCHAR *szTmp, int n);
 		void list_devices();
 	public:
 		bool FakeDosNameForDevice (WCHAR *lpszDiskFile, WCHAR *lpszDosDevice, WCHAR *lpszCFDevice, BOOL bNameOnly);
 		bool RemoveFakeDosName (WCHAR *lpszDiskFile, WCHAR *lpszDosDevice);
-		vector<WCHAR*> getdevicenamevector();
+		vector<string> getdevicenamevector();
 	};
-#endif // __HDwin__
+#endif // __WinDrv__

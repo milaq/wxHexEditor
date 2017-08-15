@@ -26,7 +26,7 @@
  * Purpose:   Code for Application Class
  * Author:    Death Knight
  * Created:   2008-05-12
- * Copyright: Death Knight (wxhexeditor.sourceforge.net)
+ * Copyright: Erdem U. Altinyurt
  * License:...GPL
  **************************************************************/
 
@@ -42,18 +42,22 @@
 IMPLEMENT_APP(wxHexEditorApp)
 
 bool wxHexEditorApp::OnInit() {
-   wxImage::AddHandler(new wxPNGHandler);
-   SetLanguage();
-   frame = new HexEditorFrame( 0L );
-//    frame	->Connect( wxEVT_MOTION,	wxMouseEventHandler(wxHexEditorApp::OnMouseMove),NULL, this);
-   frame->Show();
-   wxYield();
+	wxImage::AddHandler(new wxPNGHandler);
+	SetLanguage();
+	frame = new HexEditorFrame( 0L );
+	// frame->Connect( wxEVT_MOTION,	wxMouseEventHandler(wxHexEditorApp::OnMouseMove),NULL, this);
+	frame->Show();
+	wxYield();
+
+	///Moved file opening via argv to OnEventLoopEnter()->MyFrameInit() because of need to wait FileSystemWatcher initialization.
+	return true;
+	}
+
+void wxHexEditorApp::MyAppInit(){
    // Open all of the files specified on the command line (assumes no flags)
-
 	//processing --flags
-   if(argc == 4) {
+	if(argc == 4) {
 		wxString str(argv[1]);
-
 		//Initializes comparison startup
 		if(str.Lower().StartsWith(wxT("--compare"))){
 			wxArrayString cfiles;
@@ -65,29 +69,36 @@ bool wxHexEditorApp::OnInit() {
 
 			::CompareDialog mcd( frame, cfiles[0], cfiles[1]);
 			mcd.ShowModal();
-
-			return true;
+			return;
 			}
 		}
 
-   for(int ii = 1; ii < argc; ++ii) {
-      wxString str(argv[ii]);
-      wxFileName fn = wxFileName(str);
- //  if(fn.FileExists() || str.Lower().StartsWith(wxT("-pid")))
-      frame->OpenFile(fn.GetFullPath());
-      }
-
-   return true;
-   }
-
-#if _FSWATCHER_
-void wxHexEditorApp::OnEventLoopEnter(wxEventLoopBase* WXUNUSED(loop)){
-      frame->CreateFileWatcher();
+	for(int ii = 1; ii < argc; ++ii) {
+		wxString str(argv[ii]);
+		wxFileName fn = wxFileName(str);
+	//  if(fn.FileExists() || str.Lower().StartsWith(wxT("-pid")))
+		frame->OpenFile(fn.GetFullPath());
 		}
+	}
+
+    // create the file system watcher here, because it needs an active loop
+void wxHexEditorApp::OnEventLoopEnter(wxEventLoopBase* WXUNUSED(loop)) //wxOVERRIDE
+	{
+	static bool first_run=true;
+	if(first_run){
+		first_run=false;
+#if _FSWATCHER_
+		if(frame->file_watcher == NULL ){
+			frame->file_watcher = new wxFileSystemWatcher();
+			frame->file_watcher->SetOwner(frame);
+			}
 #endif // _FSWATCHER_
+		MyAppInit();
+		}
+	}
 
 void wxHexEditorApp::SetLanguage(void){
-	wxString lang = wxConfigBase::Get()->Read( _T("Language"), wxEmptyString );
+	wxString lang = myConfigBase::Get()->Read( _T("Language"), wxEmptyString );
 
 	if ( lang.IsEmpty() )
 		lang= wxLocale::GetLanguageName( wxLocale::GetSystemLanguage() );
@@ -95,37 +106,38 @@ void wxHexEditorApp::SetLanguage(void){
 	if ( wxLocale::FindLanguageInfo( lang ) == NULL )
 		lang=wxT("English"); //Defaulting to english.
 
-	wxConfigBase::Get()->Write( _T("Language"), lang );
-	wxConfigBase::Get()->Flush();
+	myConfigBase::Get()->Write( _T("Language"), lang );
+	myConfigBase::Get()->Flush();
 
-	int langid = wxLocale::FindLanguageInfo( lang )->Language;
-
-
+	///Add catalog paths
 	wxFileName flnm(argv[0]); //take current path and search "locale" directory
 	myLocale.AddCatalogLookupPathPrefix( flnm.GetPath(wxPATH_GET_SEPARATOR) + _T("locale") );
+	//myLocale.AddCatalogLookupPathPrefix( _T("./locale") );
 
-//#ifdef _UNIX_
-//			myLocale.AddCatalogLookupPathPrefix( _T("/usr/local/share/locale/") );
-//#endif
+#ifdef _UNIX_
+			myLocale.AddCatalogLookupPathPrefix( _T("/usr/share/locale/") );
+#endif
+
 #ifdef __WXMAC__
 	myLocale.AddCatalogLookupPathPrefix( flnm.GetPath(wxPATH_GET_SEPARATOR) +
 	_T("..") + wxFileName::GetPathSeparator() + _T("Resources") + wxFileName::GetPathSeparator() + _T("locale") );
 #endif
+
+	///init first
+	int langid = wxLocale::FindLanguageInfo( lang )->Language;
+
+//#ifdef __WXMAC__
+//	if ( !myLocale.Init( langid, wxLOCALE_CONV_ENCODING ) )
+//#else
+	if ( !myLocale.Init( langid, wxLOCALE_LOAD_DEFAULT ) )
+//#endif
+		{
+		wxLogError(_T("This language is not supported by the system."));
+		//return; //not return here for continue to load this program catalog
+		}
+
+	///And add catalogs
 	myLocale.AddCatalog(_T("wxHexEditor"));
-
-
-
-    if( myLocale.IsAvailable( langid ) ){
-#ifdef __WXMAC__
-        if ( !myLocale.Init( langid, wxLOCALE_CONV_ENCODING ) )
-#else
-        if ( !myLocale.Init( langid ) )
-#endif
-            {
-            wxLogError(_T("This language is not supported by the system."));
-            return;
-            }
-        }
 	}
 
 #ifdef _DEBUG_EVENTS_

@@ -39,6 +39,7 @@ wxArrayString GetDeviceList( bool WithPartitions=true){
 		wxDir::GetAllFiles(wxT("/dev"), &disks, wxT("sd*"), wxDIR_FILES );
 		wxDir::GetAllFiles(wxT("/dev"), &disks, wxT("hd*"), wxDIR_FILES );
 		}
+	disks.Sort();
 #elif defined( __WXMAC__ )
 	#if wxCHECK_VERSION(2, 9, 0) //Problem on wx 2.8.x, returns null.
 	wxDir::GetAllFiles(wxT("/dev"), &disks, wxT("disk*"), wxDIR_FILES );
@@ -52,31 +53,36 @@ wxArrayString GetDeviceList( bool WithPartitions=true){
 			closedir(dirp);
 			}
 	#endif
+	disks.Sort();
 #elif defined( __WXMSW__ )
  		windowsHDD windevs;
- 		vector<wchar_t*> DevVector = windevs.getdevicenamevector();
- 		for(int i=0; i < DevVector.size();i++)
+ 		vector<string> DevVector = windevs.getdevicenamevector();
+ 		for(int i=0; i < DevVector.size();i++){
 // TODO (death#1#): Enable \\Device files!
-			if( !wxString(DevVector[i]).StartsWith(wxT("\\Device")))
+			//if( !wxString(DevVector[i]).StartsWith(wxT("\\Device")))
 				disks.Add(wxString(DevVector[i]));
+			}
+	///No Sort for MSW, because PhysicalDrive0 is better at top.
+	//disks.Sort();
 #endif
 	if( WithPartitions )
 		return disks;
 
 	int last_item=0;
-	disks.Sort();
+
 	for( unsigned i =0 ; i < disks.Count() ; i++){
-		//SubMenu categorization for posix
-		#ifndef __WXMSW__
-		if( disks.Item(i).StartsWith( disks.Item( last_item ) ) && i != 0 )
+		//Windows device menu categorization
+		#ifdef __WXMSW__
+
+//		if( disks.Item(i).StartsWith( disks.Item( last_item ).BeforeLast('\\') ) && i != 0 )
+//			disks.RemoveAt(i);
+//		else //Create new submenu
+//			last_item = i;
+
+		#else	//SubMenu categorization for posix
+			if( disks.Item(i).StartsWith( disks.Item( last_item ) ) && i != 0 )
 			disks.RemoveAt(i--);
 		else
-			last_item = i;
-
-		#else	//Windows device menu categorization
-		if( disks.Item(i).StartsWith( disks.Item( last_item ).BeforeLast('\\') ) && i != 0 )
-			disks.RemoveAt(i);
-		else //Create new submenu
 			last_item = i;
 		#endif
 		}
@@ -93,7 +99,7 @@ HexEditorFrame::HexEditorFrame( wxWindow* parent,int id ):
 	//AllocConsole();
 	#endif
 	#if _FSWATCHER_
-   file_watcher=NULL;
+	file_watcher=NULL;
 	#endif // _FSWATCHER_
 	wxIcon wxHexEditor_ICON ( wxhex_xpm );
 	this->SetIcon(wxHexEditor_ICON);
@@ -121,7 +127,7 @@ HexEditorFrame::HexEditorFrame( wxWindow* parent,int id ):
 			 "home:  wxhexeditor.org  -  diskeditor.net\n"
 			 "email: spamjunkeater@gmail.com\n");
 
-	wxConfigBase *pConfig = wxConfigBase::Get();
+	wxConfigBase *pConfig = myConfigBase::Get();
 	int x = pConfig->Read(_T("ScreenX"), 100),
 		 y = pConfig->Read(_T("ScreenY"), 100),
 		 w = pConfig->Read(_T("ScreenW"), 600),
@@ -151,10 +157,10 @@ HexEditorFrame::HexEditorFrame( wxWindow* parent,int id ):
 	MyFileHistory = new wxFileHistory( );
 	MyFileHistory->UseMenu( menuFileOpenRecent );
 	menuFileOpenRecent->Remove( *menuFileOpenRecent->GetMenuItems().begin() ); //Removes "no recent file" message
-	MyFileHistory->Load( *wxConfigBase::Get() );
+	MyFileHistory->Load( *myConfigBase::Get() );
 
 	bool ZebraEnable;
-	wxConfigBase::Get()->Read( _T("ZebraStriping"), &ZebraEnable, true );
+	myConfigBase::Get()->Read( _T("ZebraStriping"), &ZebraEnable, true );
 	mbar->Check(idZebraStriping, ZebraEnable);
 
 	PrepareAUI();
@@ -184,9 +190,9 @@ HexEditorFrame::HexEditorFrame( wxWindow* parent,int id ):
 	MyAUI->Connect( wxEVT_AUI_PANE_CLOSE, wxAuiManagerEventHandler( HexEditorFrame::OnFloatingPaneClosed ), NULL, this );
 
 	bool update_enable = false;
-	if ( !wxConfigBase::Get()->Read(_T("UpdateCheck"), &update_enable )){
+	if ( !myConfigBase::Get()->Read(_T("UpdateCheck"), &update_enable )){
 		update_enable = true;
-		wxConfigBase::Get()->Write( _T("UpdateCheck"), update_enable );
+		myConfigBase::Get()->Write( _T("UpdateCheck"), update_enable );
 		//First Run!
 		wxMessageBox( license, _("License Agreement"));
 		}
@@ -194,11 +200,11 @@ HexEditorFrame::HexEditorFrame( wxWindow* parent,int id ):
 
 	if( update_enable ){
 		double last_chk=0;
-		wxConfigBase::Get()->Read(_T("LastUpdateCheckTime"), (&last_chk));
+		myConfigBase::Get()->Read(_T("LastUpdateCheckTime"), (&last_chk));
 		if( wxDateTime::Now() - wxDateSpan::Week() > wxDateTime( last_chk ) )	//One check for a week enough
 			{
-			wxConfigBase::Get()->Write(_T("LastUpdateCheckTime"), static_cast< double >( wxDateTime::Now().GetTicks()) );
-			VersionChecker vc( wxT("http://wxhexeditor.sourceforge.net/version.php"), wxT(_VERSION_) );
+			myConfigBase::Get()->Write(_T("LastUpdateCheckTime"), static_cast< double >( wxDateTime::Now().GetTicks()) );
+			VersionChecker vc( wxT("http://www.wxhexeditor.org/version.php"), wxT(_VERSION_) );
 			}
 		}
 
@@ -208,14 +214,14 @@ HexEditorFrame::~HexEditorFrame(){
 	this->Disconnect( XORVIEW_EVENT, wxEVT_UPDATE_UI, wxUpdateUIEventHandler( HexEditorFrame::OnUpdateUI ) );
 	this->Disconnect( SELECT_EVENT, wxEVT_UPDATE_UI, wxUpdateUIEventHandler( HexEditorFrame::OnUpdateUI ) );
 	this->Disconnect( UNREDO_EVENT, wxEVT_UPDATE_UI, wxUpdateUIEventHandler( HexEditorFrame::OnUpdateUI ) );
-   this->Disconnect( TAG_CHANGE_EVENT, wxEVT_UPDATE_UI, wxUpdateUIEventHandler( HexEditorFrame::OnUpdateUI ) );
-   this->Disconnect( SEARCH_CHANGE_EVENT, wxEVT_UPDATE_UI, wxUpdateUIEventHandler( HexEditorFrame::OnUpdateUI ) );
-   this->Disconnect( COMPARE_CHANGE_EVENT, wxEVT_UPDATE_UI, wxUpdateUIEventHandler( HexEditorFrame::OnUpdateUI ) );
+	this->Disconnect( TAG_CHANGE_EVENT, wxEVT_UPDATE_UI, wxUpdateUIEventHandler( HexEditorFrame::OnUpdateUI ) );
+	this->Disconnect( SEARCH_CHANGE_EVENT, wxEVT_UPDATE_UI, wxUpdateUIEventHandler( HexEditorFrame::OnUpdateUI ) );
+	this->Disconnect( COMPARE_CHANGE_EVENT, wxEVT_UPDATE_UI, wxUpdateUIEventHandler( HexEditorFrame::OnUpdateUI ) );
 
 	this->Disconnect( RESET_STYLE_EVENT, wxEVT_UPDATE_UI, wxUpdateUIEventHandler( HexEditorFrame::OnUpdateUI ) );
 	this->Disconnect( REDRAW_EVENT, wxEVT_UPDATE_UI, wxUpdateUIEventHandler( HexEditorFrame::OnUpdateUI ) );
 
-   this->Disconnect( wxEVT_CHAR,	wxKeyEventHandler(HexEditorFrame::OnKeyDown),NULL, this);
+	this->Disconnect( wxEVT_CHAR,	wxKeyEventHandler(HexEditorFrame::OnKeyDown),NULL, this);
 	this->Disconnect( wxEVT_ACTIVATE, wxActivateEventHandler(HexEditorFrame::OnActivate),NULL, this );
 
 	this->Disconnect( idInjection, wxEVT_COMMAND_MENU_SELECTED, wxCommandEventHandler( HexEditorFrame::OnMenuEvent ) );
@@ -226,7 +232,7 @@ HexEditorFrame::~HexEditorFrame(){
 	MyNotebook->Disconnect( wxEVT_COMMAND_AUINOTEBOOK_PAGE_CHANGED, wxAuiNotebookEventHandler(  HexEditorFrame::OnNotebookTabSelection ), NULL,this );
 	MyNotebook->Disconnect( wxEVT_COMMAND_AUINOTEBOOK_TAB_MIDDLE_UP, wxAuiNotebookEventHandler(  HexEditorFrame::OnNotebookTabClose ), NULL,this );
 
-	wxConfigBase *pConfig = wxConfigBase::Get();
+	wxConfigBase *pConfig = myConfigBase::Get();
 	if ( pConfig == NULL )
 		return;
 	int x, y, w, h;
@@ -292,7 +298,7 @@ void HexEditorFrame::PrepareAUI( void ){
 	Toolbar->AddSeparator();
 	Toolbar->AddTool(wxID_FIND, _("Find"), wxArtProvider::GetBitmap(wxART_FIND, wxART_TOOLBAR), _("Find"));
 	Toolbar->AddTool(wxID_REPLACE, _("Replace"), wxArtProvider::GetBitmap(wxART_FIND_AND_REPLACE, wxART_TOOLBAR), _("Find and replace"));
-	Toolbar->AddTool(idGotoOffset, _("GoTo"), wxArtProvider::GetBitmap(wxART_GO_FORWARD, wxART_TOOLBAR), _("Go to offset"));
+	Toolbar->AddTool(idGotoOffset, _("GoTo"), wxArtProvider::GetBitmap(wxART_GO_FORWARD, wxART_TOOLBAR), _("Go to Offset"));
 	Toolbar->AddSeparator();
 	Toolbar->AddTool(wxID_UNDO, _("Undo"), wxArtProvider::GetBitmap(wxART_UNDO, wxART_TOOLBAR), _("Undo"));
 	Toolbar->AddTool(wxID_REDO, _("Redo"), wxArtProvider::GetBitmap(wxART_REDO, wxART_TOOLBAR), _("Redo"));
@@ -314,14 +320,14 @@ void HexEditorFrame::PrepareAUI( void ){
 
 	//MyAUI->LoadPerspective()???
 	MyAUI -> AddPane(Toolbar, wxAuiPaneInfo().
-                  Name(wxT("Toolbar")).
+                  Name(_("Toolbar")).
 						Caption(_("Toolbar")).
                   ToolbarPane().Top().
                   LeftDockable(false).RightDockable(false));
 
 	MyTagPanel = new TagPanel( this, -1 );
 	MyAUI -> AddPane( MyTagPanel, wxAuiPaneInfo().
-					Name(wxT("TagPanel")).
+					Name(_("TagPanel")).
 					Caption(_("TagPanel")).
 					TopDockable(false).
 					BottomDockable(false).
@@ -332,7 +338,7 @@ void HexEditorFrame::PrepareAUI( void ){
 
 	MyDisassemblerPanel = new DisassemblerPanel( this, -1 );
 	MyAUI -> AddPane( MyDisassemblerPanel, wxAuiPaneInfo().
-					Name(wxT("Disassembler Panel")).
+					Name(_("Disassembler Panel")).
 					Caption(_("Disassembler Panel")).
 					TopDockable(false).
 					BottomDockable(false).
@@ -343,8 +349,8 @@ void HexEditorFrame::PrepareAUI( void ){
 
 	MySearchPanel = new SearchPanel( this, -1 );
    //Created under OnUpdateUI
-   MyAUI -> AddPane( MySearchPanel, wxAuiPaneInfo().
-				Name(wxT("Search Results")).
+	MyAUI -> AddPane( MySearchPanel, wxAuiPaneInfo().
+				Name(_("Search Results")).
 				Caption(_("Search Results")).
 				TopDockable(false).
 				BottomDockable(false).
@@ -355,8 +361,8 @@ void HexEditorFrame::PrepareAUI( void ){
 
 	MyComparePanel = new ComparePanel( this, -1 );
    //Created under OnUpdateUI
-   MyAUI -> AddPane( MyComparePanel, wxAuiPaneInfo().
-				Name(wxT("Comparison Results")).
+	MyAUI -> AddPane( MyComparePanel, wxAuiPaneInfo().
+				Name(_("Comparison Results")).
 				Caption(_("Comparison Results")).
 				TopDockable(false).
 				BottomDockable(false).
@@ -367,18 +373,18 @@ void HexEditorFrame::PrepareAUI( void ){
 
 	MyInterpreter = new DataInterpreter( this, -1 );
 	MyAUI -> AddPane( MyInterpreter, wxAuiPaneInfo().
-					Name(wxT("DataInterpreter")).
+					Name(_("DataInterpreter")).
 					Caption(_("DataInterpreter")).
 					TopDockable(false).
 					BottomDockable(false).
-					BestSize(wxSize(174,218)).
+					//BestSize(wxSize(174,218)).
 					Resizable(false).
 					Show(true).
 					Left().Layer(1).Position(0) );
 
 	MyInfoPanel = new InfoPanel( this, -1 );
 	MyAUI -> AddPane( MyInfoPanel, wxAuiPaneInfo().
-					Name(wxT("InfoPanel")).
+					Name(_("InfoPanel")).
 					Caption(_("InfoPanel")).
 					TopDockable(false).
 					BottomDockable(false).
@@ -387,8 +393,8 @@ void HexEditorFrame::PrepareAUI( void ){
 					//Resizable(false).
 					Left().Layer(1).Position(1) );
 
-   wxString tempStr;
-   wxConfigBase::Get()->Read(_T("LastPerspective"), &tempStr, wxEmptyString);
+	wxString tempStr;
+	myConfigBase::Get()->Read(_T("LastPerspective"), &tempStr, wxEmptyString);
 	MyAUI->LoadPerspective( tempStr );
 
 	ActionDisabler();
@@ -408,6 +414,12 @@ void HexEditorFrame::ActionEnabler( void ){
 		mbar->Enable( arr[i],true );
 		Toolbar->EnableTool( arr[i], true );
 		}
+
+	if( GetActiveHexEditor()->FileLength()==0 ){
+		Toolbar->EnableTool(wxID_PASTE, false );
+		mbar->Enable(wxID_PASTE, false );
+		}
+
 	mbar->Enable(idExportTAGs, true );
 	mbar->Enable(idImportTAGs, true );
 	MyInterpreter->Enable();
@@ -441,7 +453,7 @@ HexEditor* HexEditorFrame::OpenFile(wxFileName filename, bool openAtRight){
 			MyNotebook->Split( MyNotebook->GetSelection() , wxRIGHT);
 
 		bool autoShowTagsSwitch;
-		wxConfigBase::Get()->Read( _T("AutoShowTagPanel"), &autoShowTagsSwitch, true );
+		myConfigBase::Get()->Read( _T("AutoShowTagPanel"), &autoShowTagsSwitch, true );
 
 		//Detect from file name if we are opening a RAM Process:
 		if( (x->MainTagArray.Count() > 0 && autoShowTagsSwitch)  || filename.GetFullPath().Lower().StartsWith( wxT("-pid=")) )
@@ -457,8 +469,8 @@ HexEditor* HexEditorFrame::OpenFile(wxFileName filename, bool openAtRight){
 		if( found != -1 )
 				MyFileHistory->RemoveFileFromHistory( found );
 		MyFileHistory->AddFileToHistory( filename.GetFullPath() );
-		MyFileHistory->Save( *(wxConfigBase::Get()) );
-		wxConfigBase::Get()->Flush();
+		MyFileHistory->Save( *(myConfigBase::Get()) );
+		myConfigBase::Get()->Flush();
 //		mbar->Check(idFileRO, x->GetFileAccessMode()==FAL::FileAccessMode::ReadOnly);
 
 		if( wxFileName::FileExists( filename.GetFullPath().Append(wxT(".md5")) ) )
@@ -473,7 +485,8 @@ HexEditor* HexEditorFrame::OpenFile(wxFileName filename, bool openAtRight){
 #if _FSWATCHER_
 		if(!filename.GetFullPath().Lower().StartsWith( wxT("-pid="))){
 			if(file_watcher!=NULL){
-				file_watcher->Add( filename.GetFullPath(), wxFSW_EVENT_MODIFY );
+				file_watcher->Add( filename.GetFullPath() );
+				//file_watcher->Add( filename.GetFullPath(), wxFSW_EVENT_MODIFY );
 				Connect(wxEVT_FSWATCHER, wxFileSystemWatcherEventHandler(HexEditor::OnFileModify), NULL, x);
 				}
 			else{
@@ -526,11 +539,11 @@ void HexEditorFrame::OnMenuEvent( wxCommandEvent& event ){
 			//create file
 			wxFile crt;
 			if( !crt.Create( flname.GetFullPath(), true ) ){
-				wxMessageBox( _("File cannot create!") ,_T("Error!"), wxICON_ERROR, this );
+				wxMessageBox( _("File cannot create!") ,_T("Error"), wxICON_ERROR, this );
 				return;
 				}
 			if( !crt.Open( flname.GetFullPath(), wxFile::read_write ) ){
-				wxMessageBox( _("File cannot open!") ,_T("Error!"), wxICON_ERROR, this );
+				wxMessageBox( _("File cannot open.") ,_T("Error"), wxICON_ERROR, this );
 				return;
 				}
 			crt.Seek( size-1 );
@@ -632,7 +645,7 @@ void HexEditorFrame::OnMenuEvent( wxCommandEvent& event ){
 					case idBlockSelect:	MyHexEditor->BlockSelect();			    break;
 					case wxID_CUT:			MyHexEditor->CutSelection();		break;
 					case wxID_PASTE:		MyHexEditor->PasteFromClipboard();	break;
-					case wxID_DELETE:		MyHexEditor->DeleteSelection();		break;
+					case wxID_DELETE:		MyHexEditor->DeleteSelection(); MyTagPanel->Set( MyHexEditor->MainTagArray );		break;
 					case idInsert:			MyHexEditor->InsertBytes();			break;
 					//idInjection for Right click Menu Insertion Event
 					case idInjection:		MyHexEditor->InsertBytes();			break;
@@ -670,7 +683,6 @@ void HexEditorFrame::OnDevicesMenu( wxCommandEvent& event ){
 	if( event.GetId() >= idDiskDevice ){
 		int i=event.GetId() - idDiskDevice;
 		wxArrayString disks = GetDeviceList();
-		disks.Sort();
 		OpenFile( wxFileName(disks.Item(i)) );
 		}
 	else if( event.GetId() == idDeviceRam ){
@@ -777,7 +789,7 @@ void HexEditorFrame::OnViewMenu( wxCommandEvent& event ){
 			for( unsigned i = 0 ; i< MyNotebook->GetPageCount(); i++ ){
 				static_cast<HexEditor*>(MyNotebook->GetPage( i ))->ZebraEnable=event.IsChecked();
 				static_cast<HexEditor*>(MyNotebook->GetPage( i ))->RePaint();
-				wxConfigBase::Get()->Write( _T("ZebraStriping"), event.IsChecked() );
+				myConfigBase::Get()->Write( _T("ZebraStriping"), event.IsChecked() );
 				}
 			break;
 		case idShowOffset:
@@ -816,7 +828,6 @@ void HexEditorFrame::OnHelpMenu( wxCommandEvent& event ){
 		AllAbout.AddDeveloper( _T("Erdem U. Altinyurt") );
 		AllAbout.AddArtist( _T("Vlad Adrian") );
 		AllAbout.SetWebSite( _T("http://www.wxhexeditor.org"));
-
 		AllAbout.SetLicense( license );
 		wxAboutBox(AllAbout);
 		}
@@ -830,9 +841,6 @@ void HexEditorFrame::OnHelpMenu( wxCommandEvent& event ){
 		///Report a bug for help this project
 		//wxLaunchDefaultBrowser( wxT("http://sourceforge.net/p/wxhexeditor/bugs/"),wxBROWSER_NEW_WINDOW);
 		wxLaunchDefaultBrowser( wxT("https://github.com/EUA/wxHexEditor/issues"),wxBROWSER_NEW_WINDOW);
-
-
-
 	}
 
 void HexEditorFrame::OnUpdateUI(wxUpdateUIEvent& event){
@@ -841,12 +849,12 @@ void HexEditorFrame::OnUpdateUI(wxUpdateUIEvent& event){
 #endif
 // TODO (death#1#): Add idBased approach to decrease overhead!! This slowdowns cursor movement!!!
 
-	mbar->Check(idInterpreter,	(MyAUI->GetPane(MyInterpreter).IsFloating()	? MyAUI->GetPane(MyInterpreter).frame->IsShown() : MyInterpreter->IsShown()) );
-	mbar->Check(idInfoPanel,	(MyAUI->GetPane(MyInfoPanel).IsFloating() 	? MyAUI->GetPane(MyInfoPanel).frame->IsShown() : MyInfoPanel->IsShown()) );
+	mbar->Check(idInterpreter,	(MyAUI->GetPane(MyInterpreter).IsFloating()		? MyAUI->GetPane(MyInterpreter).frame->IsShown() : MyInterpreter->IsShown()) );
+	mbar->Check(idInfoPanel,	(MyAUI->GetPane(MyInfoPanel).IsFloating()		? MyAUI->GetPane(MyInfoPanel).frame->IsShown() : MyInfoPanel->IsShown()) );
 	mbar->Check(idTagPanel,		(MyAUI->GetPane(MyTagPanel).IsFloating()		? MyAUI->GetPane(MyTagPanel).frame->IsShown() : MyTagPanel->IsShown()) );
 	mbar->Check(idDisassemblerPanel,(MyAUI->GetPane(MyDisassemblerPanel).IsFloating() ? MyAUI->GetPane(MyDisassemblerPanel).frame->IsShown() : MyDisassemblerPanel->IsShown()) );
-	mbar->Check(idSearchPanel,	(MyAUI->GetPane(MySearchPanel).IsFloating()	? MyAUI->GetPane(MySearchPanel).frame->IsShown() : MySearchPanel->IsShown()) );
-	mbar->Check(idComparePanel,(MyAUI->GetPane(MyComparePanel).IsFloating()	? MyAUI->GetPane(MyComparePanel).frame->IsShown() : MyComparePanel->IsShown()) );
+	mbar->Check(idSearchPanel,	(MyAUI->GetPane(MySearchPanel).IsFloating()		? MyAUI->GetPane(MySearchPanel).frame->IsShown() : MySearchPanel->IsShown()) );
+	mbar->Check(idComparePanel, (MyAUI->GetPane(MyComparePanel).IsFloating()	? MyAUI->GetPane(MyComparePanel).frame->IsShown() : MyComparePanel->IsShown()) );
 	mbar->Check(idToolbar,		(MyAUI->GetPane(Toolbar).IsFloating()			? MyAUI->GetPane(Toolbar).frame->IsShown() : Toolbar->IsShown()) );
 
 //	mbar->Check(idInfoPanel, MyInfoPanel->IsShown());
@@ -879,7 +887,10 @@ void HexEditorFrame::OnUpdateUI(wxUpdateUIEvent& event){
 		//This /dev/ will drop on adding menu for cosmetic!
 		for( unsigned i =0 ; i < disks.Count() ; i++)
 			disks[i]=disks.Item(i).AfterLast('/');
+
+		#ifndef __WXMSW__
 		disks.Sort();
+		#endif // __WXMSW__
 
 		wxMenu *nm;
 		int last_item=0;
@@ -887,8 +898,22 @@ void HexEditorFrame::OnUpdateUI(wxUpdateUIEvent& event){
 			//Old way...
 			//menuDeviceDisk->Append( idDiskDevice+i, disks.Item(i).AfterLast('/'), wxT(""), wxITEM_NORMAL );
 
-			//SubMenu categorization for posix
-			#ifndef __WXMSW__
+			//Windows device menu categorization
+			#ifdef __WXMSW__
+			menuDeviceDisk->Append( idDiskDevice+i, disks.Item(i).AfterLast('\\'), wxT(""), wxITEM_NORMAL );
+//
+//			if( disks.Item(i).StartsWith( disks.Item( last_item ).BeforeLast('\\') ) && i != 0 ){
+//				nm->Append( idDiskDevice+i, disks.Item(i).AfterLast('\\'), wxT(""), wxITEM_NORMAL );
+//				}
+//			else{ //Create new submenu
+//				nm=new wxMenu( );
+//				nm->Append( idDiskDevice+i, disks.Item(i).AfterLast('\\'), wxT(""), wxITEM_NORMAL );
+//				wxMenuItem* mi = menuDeviceDisk->AppendSubMenu( nm, disks.Item(i).BeforeLast('\\')+wxT('\\') );
+//				//if(disks.Item(i).StartsWith(wxT("\\Device")))
+//				//	mi->Enable(false);
+//				last_item = i;
+//				}
+			#else
 			if( disks.Item(i).StartsWith( disks.Item( last_item ) ) && i != 0 )
 				nm->Append( idDiskDevice+i, disks.Item(i), wxT(""), wxITEM_NORMAL );
 			else{
@@ -897,18 +922,7 @@ void HexEditorFrame::OnUpdateUI(wxUpdateUIEvent& event){
 				menuDeviceDisk->AppendSubMenu( nm, disks.Item(i) );
 				last_item = i;
 				}
-			#else	//Windows device menu categorization
-			if( disks.Item(i).StartsWith( disks.Item( last_item ).BeforeLast('\\') ) && i != 0 ){
-				nm->Append( idDiskDevice+i, disks.Item(i).AfterLast('\\'), wxT(""), wxITEM_NORMAL );
-				}
-			else{ //Create new submenu
-				nm=new wxMenu( );
-				nm->Append( idDiskDevice+i, disks.Item(i).AfterLast('\\'), wxT(""), wxITEM_NORMAL );
-				wxMenuItem* mi = menuDeviceDisk->AppendSubMenu( nm, disks.Item(i).BeforeLast('\\')+wxT('\\') );
-				if(disks.Item(i).StartsWith(wxT("\\Device")))
-					mi->Enable(false);
-				last_item = i;
-				}
+
 			#endif
 
 
@@ -924,18 +938,28 @@ void HexEditorFrame::OnUpdateUI(wxUpdateUIEvent& event){
 
 	if( MyNotebook->GetPageCount() ){
 		HexEditor *MyHexEditor = GetActiveHexEditor();
-		if( MyHexEditor != NULL ){
+		if( event.GetId() == idFileRO ){
 			switch( MyHexEditor->GetFileAccessMode() ){
 				case FAL::ReadOnly :
 					mbar->Check(idFileRO, true);
+					#ifdef _DEBUG_
+					std::cout << "Menu ticked as Read-Only file \r\n";
+					#endif // _DEBUG_
 					break;
 				case FAL::ReadWrite :
 					mbar->Check(idFileRW, true);
+					#ifdef _DEBUG_
+					std::cout << "Menu ticked as Read-Write file \r\n";
+					#endif // _DEBUG_
 					break;
 				case FAL::DirectWrite :
 					mbar->Check(idFileDW, true);
+					#ifdef _DEBUG_
+					std::cout << "Menu ticked as DirectWrite file \r\n";
+					#endif // _DEBUG_
 					break;
 				}
+			wxYield();//Sometime, evenif you make mbar->Check(idFileRO, true), display is not updated. It's because wxYield req.
 			}
 
 		if( event.GetId() == RESET_STYLE_EVENT ){
@@ -962,35 +986,55 @@ void HexEditorFrame::OnUpdateUI(wxUpdateUIEvent& event){
 			#ifdef _DEBUG_SELECT_
 				std::cout << "HexEditorFrame::Select_Event :" << event.GetString().ToAscii() << std::endl ;
 			#endif
-			Toolbar->EnableTool( wxID_COPY, event.GetString() == wxT("Selected") );
-			mbar->Enable( wxID_COPY, event.GetString() == wxT("Selected") );
-
-			Toolbar->EnableTool( wxID_PASTE, event.GetString() == wxT("NotSelected") );
-			mbar->Enable( wxID_PASTE, event.GetString() == wxT("NotSelected") );
-
-			mbar->Enable( idCopyAs, event.GetString() == wxT("Selected") );
-			mbar->Enable( idSaveAsDump, event.GetString() == wxT("Selected") );
-			mbar->Enable( idFillSelection, event.GetString() == wxT("Selected") );
-
-			if(!GetActiveHexEditor()->IsFileUsingXORKey() && !GetActiveHexEditor()->IsBlockDevice() ){
-				Toolbar->EnableTool( wxID_CUT, event.GetString() == wxT("Selected") );
-				mbar->Enable( wxID_CUT, event.GetString() == wxT("Selected") );
-				Toolbar->EnableTool( wxID_DELETE, event.GetString() == wxT("Selected") );
-				mbar->Enable( wxID_DELETE, event.GetString() == wxT("Selected") );
-				Toolbar->EnableTool( idInsert, event.GetString() == wxT("NotSelected") );
-				mbar->Enable( idInsert, event.GetString() == wxT("NotSelected") );
-				}
-			else{
+			if( GetActiveHexEditor()->FileLength()==0 ){
+				Toolbar->EnableTool( wxID_COPY, false );
+				mbar->Enable( wxID_COPY, false );
+				Toolbar->EnableTool( wxID_PASTE, false );
+				mbar->Enable( wxID_PASTE, false );
+				mbar->Enable( idCopyAs, false );
+				mbar->Enable( idSaveAsDump, false );
+				mbar->Enable( idFillSelection, false );
 				Toolbar->EnableTool( wxID_CUT, false );
 				mbar->Enable( wxID_CUT, false );
 				Toolbar->EnableTool( wxID_DELETE, false );
 				mbar->Enable( wxID_DELETE, false );
-				Toolbar->EnableTool( idInsert, false );
-				mbar->Enable( idInsert, false);
+				Toolbar->EnableTool( idInsert, true );
+				mbar->Enable( idInsert, true );
+				}
+			else{
+				Toolbar->EnableTool( wxID_COPY, event.GetString() == wxT("Selected") );
+				mbar->Enable( wxID_COPY, event.GetString() == wxT("Selected") );
+
+				Toolbar->EnableTool( wxID_PASTE, event.GetString() == wxT("NotSelected") );
+				mbar->Enable( wxID_PASTE, event.GetString() == wxT("NotSelected") );
+
+				mbar->Enable( idCopyAs, event.GetString() == wxT("Selected") );
+				mbar->Enable( idSaveAsDump, event.GetString() == wxT("Selected") );
+				mbar->Enable( idFillSelection, event.GetString() == wxT("Selected") );
+
+				if(!GetActiveHexEditor()->IsFileUsingXORKey()
+					 && !GetActiveHexEditor()->IsBlockDevice()
+					 && GetActiveHexEditor()->ComparatorHexEditor==NULL		//Only check for connected scrools
+					 && GetActiveHexEditor()->CompareArray.size()==0		//Only checks only for compare array.
+					){
+					Toolbar->EnableTool( wxID_CUT, event.GetString() == wxT("Selected") );
+					mbar->Enable( wxID_CUT, event.GetString() == wxT("Selected") );
+					Toolbar->EnableTool( wxID_DELETE, event.GetString() == wxT("Selected") );
+					mbar->Enable( wxID_DELETE, event.GetString() == wxT("Selected") );
+					Toolbar->EnableTool( idInsert, event.GetString() == wxT("NotSelected") );
+					mbar->Enable( idInsert, event.GetString() == wxT("NotSelected") );
+					}
+				else{
+					Toolbar->EnableTool( wxID_CUT, false );
+					mbar->Enable( wxID_CUT, false );
+					Toolbar->EnableTool( wxID_DELETE, false );
+					mbar->Enable( wxID_DELETE, false );
+					Toolbar->EnableTool( idInsert, false );
+					mbar->Enable( idInsert, false);
+					}
 				}
 			Toolbar->Refresh();
 			}
-
 
 		else if(event.GetId()==XORVIEW_EVENT){
 			int sel = MyNotebook->GetSelection();
@@ -1061,9 +1105,9 @@ void HexEditorFrame::OnNotebookTabSelection( wxAuiNotebookEvent& event ){
 				else
 					event.SetString( wxT("NotSelected") );
 
-            event.SetId( SELECT_EVENT );
+				event.SetId( SELECT_EVENT );
 				OnUpdateUI( event );
-            event.SetId( UNREDO_EVENT );
+				event.SetId( UNREDO_EVENT );
 				OnUpdateUI( event );
 				}
 		}
@@ -1116,36 +1160,6 @@ void HexEditorFrame::TagHideAll( void ){
 			MyHexEditor->TagHideAll();
 		}
 	}
-
-#if _FSWATCHER_
-bool HexEditorFrame::CreateFileWatcher(){
-   if (file_watcher)
-		return false;
-	file_watcher = new wxFileSystemWatcher();
-   file_watcher->SetOwner(this);
-	Connect(wxEVT_FSWATCHER, wxFileSystemWatcherEventHandler(HexEditorFrame::OnFileSystemEvent));
-
-	//Reconnecting already open files (open by argument) to FSWATCHER event.
-	for( unsigned i = 0 ; i<MyNotebook->GetPageCount() ; i++ ){
-		HexEditor *MyHexEditor = static_cast<HexEditor*>( MyNotebook->GetPage( i ) );
-		if(!MyHexEditor->GetFileName().GetFullPath().Lower().StartsWith( wxT("-pid="))){
-			if(file_watcher!=NULL){
-				file_watcher->Add( MyHexEditor->GetFileName().GetFullPath(), wxFSW_EVENT_MODIFY );
-				Connect(wxEVT_FSWATCHER, wxFileSystemWatcherEventHandler(HexEditor::OnFileModify), NULL, MyHexEditor);
-				}
-			else{
-				std::cout << "File_watcher event is null! File Watcher is not working!" << std::endl;
-				}
-			}
-		}
-   return true;
-}
-void HexEditorFrame::OnFileSystemEvent(wxFileSystemWatcherEvent &event){
-	//if(event.GetChangeType()==wxFSW_EVENT_MODIFY)
-	//	wxMessageBox("Captured Change event on frame!");
-	event.Skip(true);
-	}
-#endif // _FSWATCHER_
 
 wxBitmap HexEditorArtProvider::CreateBitmap(const wxArtID& id, const wxArtClient& client, const wxSize& WXUNUSED(size)){
 	if ( client == wxART_TOOLBAR ){
@@ -1223,6 +1237,6 @@ VersionChecker::VersionChecker( wxString _url, wxString _version, wxWindow *pare
 	}
 
 void VersionChecker::OnChkDisplay( wxCommandEvent& event ){
-	wxConfigBase::Get()->Write( _T("UpdateCheck"), !wxchk_display->GetValue());
+	myConfigBase::Get()->Write( _T("UpdateCheck"), !wxchk_display->GetValue());
 	}
 

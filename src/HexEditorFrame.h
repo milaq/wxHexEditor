@@ -45,12 +45,9 @@
 #include <wx/mstream.h>
 #include <wx/docview.h>
 
-#if wxCHECK_VERSION( 2,9,0 ) && defined( __WXGTK__)
-	#define _FSWATCHER_  1
-	#include <wx/fswatcher.h>
-#else
-	#define _FSWATCHER_  0
-#endif
+#if _FSWATCHER_
+#include <wx/fswatcher.h>
+#endif // _FSWATCHER_
 
 #if defined __WXMAC__
 #include "../resources/osx/png2c.h"
@@ -72,11 +69,8 @@ class HexEditorFrame : public HexEditorGui {
 		~HexEditorFrame();
 		void TagHideAll();
 		class HexEditor* OpenFile(wxFileName flname, bool openAtRight=false);
-
 		class HexEditor* GetActiveHexEditor(void);
 #if _FSWATCHER_
-		void OnFileSystemEvent( wxFileSystemWatcherEvent& event );
-		bool CreateFileWatcher(void);
 		wxFileSystemWatcher *file_watcher;
 #endif
 	protected:
@@ -96,9 +90,6 @@ class HexEditorFrame : public HexEditorGui {
 		void OnNotebookTabSelection( wxAuiNotebookEvent& event );
 		void OnNotebookTabClose( wxAuiNotebookEvent& event );
 		void OnFloatingPaneClosed( wxAuiManagerEvent& event );
-
-		void CompareDialogx( void );
-		void ChecksumDialogx( void );
 
 	private:
 		void PrepareAUI( void );

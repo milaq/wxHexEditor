@@ -26,10 +26,12 @@
 #include <stdint.h>
 #include <wx/defs.h>
 #include <wx/buffer.h>
+#include <wx/graphics.h>
 #include <wx/textctrl.h>
 #include <wx/caret.h>
 #include <wx/wx.h>
 #include <wx/config.h>
+#include <wx/fileconf.h>
 #include <wx/dcbuffer.h>
 #include <wx/clipbrd.h>
 
@@ -138,6 +140,7 @@ virtual int PixelCoordToInternalPosition( wxPoint mouse );
 			bool selected;		//select available variable
 			} select;
 virtual void TagPainter( wxDC* DC, TagElement& TG );
+virtual void TagPainterGC( wxGraphicsContext* gc, TagElement& TG );
 		void RePaint( void );
 
 inline void DrawSeperationLineAfterChar( wxDC* DC, int offset );
@@ -146,7 +149,7 @@ inline void DrawSeperationLineAfterChar( wxDC* DC, int offset );
 		int *ZebraStriping;
 
 	protected:
-		wxDC* UpdateDC( void );
+		wxDC* UpdateDC( wxDC* dc=NULL);
 		wxMemoryDC* CreateDC( void );
 		wxMemoryDC* internalBufferDC;
 		wxBitmap*   internalBufferBMP;
@@ -185,6 +188,19 @@ virtual void ChangeSize();	// update the geometry
 	   // DECLARE_DYNAMIC_CLASS(wxHexCtrl)
 	};
 
+///Wrapper for Portable vs Registry configbase.
+//if there are wxHexEditor.cfg file exits on current path, wxHexEditor switches to portable version.
+class myConfigBase{
+	public:
+	static wxConfigBase* Get(){
+		static wxFileConfig* AppConfigFile=new wxFileConfig("", "","wxHexEditor.cfg", "",  wxCONFIG_USE_RELATIVE_PATH);
+		if( wxFileExists ("wxHexEditor.cfg") )
+			return AppConfigFile;
+		else
+			return wxConfigBase::Get();
+		}
+	};
+
 class wxHexTextCtrl : public wxHexCtrl{
 	public:
 		wxString CodepageTable;
@@ -206,7 +222,7 @@ class wxHexTextCtrl : public wxHexCtrl{
 				FontEnc=wxFONTENCODING_ALTERNATIVE;
 
 				wxString cp;
-				wxConfigBase::Get()->Read( _T("CharacterEncoding"), &cp, wxT("DOS CP437") );
+				myConfigBase::Get()->Read( _T("CharacterEncoding"), &cp, wxT("DOS CP437") );
 				PrepareCodepageTable(cp);
 				};
 
@@ -258,7 +274,7 @@ class wxHexOffsetCtrl : public wxHexCtrl{
 
             //offset_mode='u';
             CtrlType=2;
-            offset_mode=wxConfigBase::Get()->Read( _T("LastOffsetMode"), wxT("u") )[0];
+            offset_mode=myConfigBase::Get()->Read( _T("LastOffsetMode"), wxT("u") )[0];
             if( offset_mode=='s' )	// No force to sector mode at startup.
 					offset_mode='u';
 
